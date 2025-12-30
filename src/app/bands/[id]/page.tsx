@@ -7,16 +7,27 @@ import toast, { Toaster } from 'react-hot-toast';
 import BandChat from '@/src/components/BandChat';
 
 export default function BandDetailPage() {
-  const { id } = useParams(); // id อาจเป็น string หรือ undefined
+  const { id } = useParams();
   const router = useRouter();
   const [band, setBand] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
+  // States: Dashboard & Invite
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [matches, setMatches] = useState<any[]>([]); 
   const [inviteLoading, setInviteLoading] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat'>('dashboard');
+  const [nextBooking, setNextBooking] = useState<any>(null); // 👈 State เก็บข้อมูลการจอง
+
+  // 👇 Tab Control
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'setlist'>('dashboard');
+
+  // States: Setlist Manager
+  const [setlists, setSetlists] = useState<any[]>([]);
+  const [activeSetlist, setActiveSetlist] = useState<any>(null);
+  const [newSetlistTitle, setNewSetlistTitle] = useState('');
+  const [showAddSetlist, setShowAddSetlist] = useState(false);
+  const [newSong, setNewSong] = useState({ title: '', artist: '', key: '', youtube_link: '' });
 
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
@@ -26,27 +37,31 @@ export default function BandDetailPage() {
   }>({ show: false, userId: null, name: '', type: 'kick' });
 
   useEffect(() => {
-    // เช็ค id ก่อนเริ่มทำงาน
     if (!id) return;
-
     const userData = localStorage.getItem('user');
     if (!userData) { router.push('/login'); return; }
     const u = JSON.parse(userData);
     setUser(u);
     fetchBandDetail();
-  }, [id]); // ใส่ id ใน dependency array
+  }, [id]);
+
+  // เมื่อเปลี่ยน Tab
+  useEffect(() => {
+    if (!id) return;
+    if (activeTab === 'setlist') fetchSetlists();
+    if (activeTab === 'dashboard') fetchNextBooking(); // 👈 ดึงข้อมูลการจอง
+  }, [activeTab, id]);
 
   const fetchMatches = async (userId: number) => {
     try {
-      const res = await axios.get(`/api/users/match/${userId}`, { headers: { "ngrok-skip-browser-warning": "true" } });
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/users/match/${userId}`);
       setMatches(res.data);
     } catch (error) { console.error(error); }
   };
 
   const fetchBandDetail = async () => {
     try {
-      // 🟢 แก้จุดที่ 1: ใส่ as string
-      const res = await axios.get(`/api/bands/${id as string}`, { headers: { "ngrok-skip-browser-warning": "true" } });
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/bands/${id as string}`);
       setBand(res.data);
       setLoading(false);
     } catch (error) {
@@ -54,6 +69,82 @@ export default function BandDetailPage() {
       router.push('/bands');
     }
   };
+
+  // --- Logic Next Booking ---
+  const fetchNextBooking = async () => {
+    try {
+        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/bookings/band/${id}/upcoming`);
+        if (res.data && res.data.length > 0) {
+            setNextBooking(res.data[0]);
+        } else {
+            setNextBooking(null);
+        }
+    } catch (err) {
+        console.log("No upcoming booking");
+    }
+  };
+
+  // --- Logic Setlist ---
+  const fetchSetlists = async () => {
+    try {
+        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/setlists?bandId=${id}`);
+        setSetlists(res.data);
+        if (res.data.length > 0 && !activeSetlist) {
+            setActiveSetlist(res.data[0]);
+        }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleCreateSetlist = async () => {
+    if (!newSetlistTitle) return;
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/setlists`, {
+        bandId: Number(id),
+        title: newSetlistTitle
+      });
+      setNewSetlistTitle('');
+      setShowAddSetlist(false);
+      fetchSetlists();
+      toast.success('สร้าง Setlist ใหม่แล้ว');
+    } catch (err) { toast.error('สร้างไม่สำเร็จ'); }
+  };
+
+  const handleAddSong = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSong.title) return;
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/setlists/${activeSetlist.setlist_id}/songs`, newSong);
+      setNewSong({ title: '', artist: '', key: '', youtube_link: '' });
+      fetchSetlists();
+      toast.success('เพิ่มเพลงแล้ว');
+    } catch (err) { toast.error('เพิ่มเพลงไม่สำเร็จ'); }
+  };
+
+  const updateStatus = async (songId: number, currentStatus: string) => {
+    const nextStatus = currentStatus === 'pending' ? 'learning' : currentStatus === 'learning' ? 'ready' : 'pending';
+    
+    // Optimistic Update
+    const updatedSetlists = setlists.map(list => {
+        if (list.setlist_id === activeSetlist.setlist_id) {
+            return {
+                ...list,
+                songs: list.songs.map((s: any) => s.song_id === songId ? { ...s, status: nextStatus } : s)
+            };
+        }
+        return list;
+    });
+    setSetlists(updatedSetlists);
+    setActiveSetlist(updatedSetlists.find((l: any) => l.setlist_id === activeSetlist.setlist_id));
+
+    await axios.patch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/setlists/songs/${songId}`, { status: nextStatus });
+  };
+
+  const getYoutubeId = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+  // ---------------------
 
   const initiateRemove = (userId: number, name: string, type: 'kick' | 'leave') => {
     setConfirmModal({ show: true, userId, name, type });
@@ -63,10 +154,8 @@ export default function BandDetailPage() {
     if (!confirmModal.userId) return;
 
     try {
-      // 🟢 แก้จุดที่ 2: ใส่ as string
-      await axios.delete(`/api/bands/${id as string}/members/${confirmModal.userId}`, {
-        data: { requesterId: user.user_id },
-        headers: { "ngrok-skip-browser-warning": "true" }
+      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/bands/${id as string}/members/${confirmModal.userId}`, {
+        data: { requesterId: user.user_id }
       });
 
       if (confirmModal.type === 'leave') {
@@ -85,8 +174,7 @@ export default function BandDetailPage() {
   const handleInvite = async (targetUserId: number) => {
     setInviteLoading(targetUserId);
     try {
-      // 🟢 แก้จุดที่ 3: ใส่ as string
-      await axios.post(`/api/bands/${id as string}/add-member`, { userId: targetUserId }, { headers: { "ngrok-skip-browser-warning": "true" } });
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/bands/${id as string}/add-member`, { userId: targetUserId });
       toast.success('ส่งคำเชิญเรียบร้อย! รอเพื่อนตอบรับนะครับ ⏳');
       fetchBandDetail(); 
       setMatches(prev => prev.filter(m => m.user_id !== targetUserId));
@@ -111,10 +199,10 @@ export default function BandDetailPage() {
 
       {/* Cover Image */}
       <div className="h-64 w-full bg-gradient-to-b from-zinc-800 to-black relative">
-         <img src={band.band_img} className="w-full h-full object-cover opacity-40 blur-sm" />
+         <img src={band.band_img || 'https://via.placeholder.com/1500x500'} className="w-full h-full object-cover opacity-40 blur-sm" />
          <div className="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-[#0a0a0a] to-transparent">
             <div className="max-w-6xl mx-auto flex items-end gap-6">
-                <img src={band.band_img} className="w-32 h-32 rounded-3xl border-4 border-[#0a0a0a] shadow-2xl bg-zinc-800 object-cover" />
+                <img src={band.band_img || 'https://via.placeholder.com/150'} className="w-32 h-32 rounded-3xl border-4 border-[#0a0a0a] shadow-2xl bg-zinc-800 object-cover" />
                 <div className="mb-2">
                     <h1 className="text-5xl font-black text-white">{band.band_name}</h1>
                     <p className="text-zinc-400 mt-1 text-lg max-w-2xl">{band.description}</p>
@@ -123,12 +211,19 @@ export default function BandDetailPage() {
          </div>
       </div>
 
+      {/* Navigation Tabs */}
       <div className="flex justify-center mt-6 gap-2">
         <button 
             onClick={() => setActiveTab('dashboard')}
             className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${activeTab === 'dashboard' ? 'bg-white text-black shadow-lg scale-105' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
         >
             📊 Dashboard
+        </button>
+        <button 
+            onClick={() => setActiveTab('setlist')}
+            className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${activeTab === 'setlist' ? 'bg-yellow-500 text-black shadow-lg scale-105' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
+        >
+            🎵 Setlist
         </button>
         <button 
             onClick={() => setActiveTab('chat')}
@@ -140,7 +235,8 @@ export default function BandDetailPage() {
 
       <div className="max-w-6xl mx-auto px-6 mt-8">
         
-        {activeTab === 'dashboard' ? (
+        {/* --- Tab: Dashboard --- */}
+        {activeTab === 'dashboard' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column: Members */}
                 <div className="lg:col-span-2 space-y-6 animate-in slide-in-from-left-4 duration-500">
@@ -206,17 +302,174 @@ export default function BandDetailPage() {
                     </div>
                 </div>
 
+                {/* Right Column: Band Status / Next Booking */}
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-500 delay-100">
                     <div className="bg-zinc-900/50 border border-white/5 rounded-3xl p-6">
-                        <h3 className="font-bold text-zinc-400 uppercase tracking-widest text-xs mb-4">Band Status</h3>
-                        <div className="text-center py-10 border border-dashed border-zinc-700 rounded-2xl bg-zinc-900/20">
-                            <p className="text-zinc-500 mb-4">พร้อมสำหรับการซ้อมครั้งต่อไปหรือยัง?</p>
-                            <button onClick={() => router.push('/rooms')} className="text-black bg-yellow-500 px-6 py-2 rounded-xl font-bold hover:brightness-110 transition-all shadow-lg">จองห้องซ้อม 🎸</button>
-                        </div>
+                        <h3 className="font-bold text-zinc-400 uppercase tracking-widest text-xs mb-4">
+                            Band Status
+                        </h3>
+                        
+                        {nextBooking ? (
+                            // ✅ CASE 1: มีนัดซ้อม
+                            <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 rounded-2xl p-6 border border-white/10 shadow-xl relative overflow-hidden group">
+                                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-green-500 group-hover:w-2 transition-all duration-300"></div>
+                                <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                        <p className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-1">Upcoming Rehearsal</p>
+                                        <h4 className="font-bold text-2xl text-white">
+                                            {new Date(nextBooking.booking_date).toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short' })}
+                                        </h4>
+                                    </div>
+                                    <span className="bg-green-500/10 text-green-500 text-[10px] font-black px-2 py-1 rounded border border-green-500/20">CONFIRMED</span>
+                                </div>
+                                <div className="flex items-end gap-2 mb-4">
+                                    <span className="text-4xl font-black text-white tracking-tighter">{nextBooking.start_time.slice(0, 5)}</span>
+                                    <span className="text-zinc-500 font-medium mb-1.5 text-sm">- {nextBooking.end_time.slice(0, 5)}</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-zinc-300 text-sm bg-black/30 p-3 rounded-xl mb-4">
+                                    <span className="text-xl">🎹</span>
+                                    <div>
+                                        <p className="font-bold text-white">{nextBooking.room?.room_name || 'ห้องซ้อม'}</p>
+                                        <p className="text-xs text-zinc-500">{nextBooking.room?.location || 'Studio'}</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => router.push(`/rooms/${nextBooking.room?.room_id}`)}
+                                    className="w-full bg-white text-black py-2.5 rounded-xl text-sm font-bold hover:bg-yellow-400 transition flex items-center justify-center gap-2"
+                                >
+                                    ดูรายละเอียด
+                                </button>
+                            </div>
+                        ) : (
+                            // ❌ CASE 2: ไม่มีนัด (โชว์ปุ่มจอง)
+                            <div className="text-center py-10 border border-dashed border-zinc-700 rounded-2xl bg-zinc-900/20">
+                                <p className="text-zinc-500 mb-4 text-sm">ยังไม่มีตารางซ้อมเร็วๆ นี้</p>
+                                <button 
+                                    onClick={() => router.push('/rooms')} 
+                                    className="text-black bg-yellow-500 px-6 py-3 rounded-xl font-bold hover:brightness-110 transition-all shadow-lg text-sm"
+                                >
+                                    จองห้องซ้อมทันที 🎸
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
-        ) : (
+        )}
+
+        {/* --- Tab: Setlist --- */}
+        {activeTab === 'setlist' && (
+             <div className="animate-in fade-in zoom-in duration-300">
+                 {/* Tabs เลือก Setlist */}
+                 <div className="flex gap-4 overflow-x-auto pb-4 mb-6 no-scrollbar">
+                    <button 
+                        onClick={() => setShowAddSetlist(true)}
+                        className="flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 px-6 py-3 rounded-xl font-bold transition flex items-center gap-2 border border-dashed border-zinc-600"
+                    >
+                        + New List
+                    </button>
+                    {setlists.map(list => (
+                        <button
+                            key={list.setlist_id}
+                            onClick={() => setActiveSetlist(list)}
+                            className={`flex-shrink-0 px-6 py-3 rounded-xl font-bold transition whitespace-nowrap border ${
+                                activeSetlist?.setlist_id === list.setlist_id 
+                                ? 'bg-yellow-500 text-black border-yellow-500 shadow-lg shadow-yellow-500/20' 
+                                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-yellow-500/50'
+                            }`}
+                        >
+                            {list.title}
+                            <span className="ml-2 text-xs opacity-60">({list.songs.length})</span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* เนื้อหา Setlist */}
+                {activeSetlist ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* List เพลง */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {activeSetlist.songs.length === 0 ? (
+                                <div className="text-center py-20 bg-zinc-900/50 rounded-3xl border border-dashed border-zinc-800">
+                                    <p className="text-zinc-500">ยังไม่มีเพลงในรายการนี้ เพิ่มเลย 👉</p>
+                                </div>
+                            ) : (
+                                activeSetlist.songs.map((song: any, index: number) => (
+                                    <div key={song.song_id} className="bg-zinc-900 border border-white/5 p-4 rounded-2xl flex items-center gap-4 hover:border-white/20 transition group">
+                                        <div className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-full text-zinc-500 font-bold text-sm">{index + 1}</div>
+                                        
+                                        {getYoutubeId(song.youtube_link) && (
+                                            <img src={`https://img.youtube.com/vi/${getYoutubeId(song.youtube_link)}/default.jpg`} className="w-16 h-12 object-cover rounded-lg opacity-80" />
+                                        )}
+
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-bold text-white truncate">{song.title}</h4>
+                                            <div className="flex items-center gap-2 text-xs text-zinc-400">
+                                                <span>🎤 {song.artist || 'Unknown'}</span>
+                                                {song.key && <span className="bg-zinc-800 px-1.5 rounded">Key: {song.key}</span>}
+                                                {song.youtube_link && <a href={song.youtube_link} target="_blank" className="text-blue-400 hover:underline">▶ Watch</a>}
+                                            </div>
+                                        </div>
+
+                                        <button 
+                                            onClick={() => updateStatus(song.song_id, song.status)}
+                                            className={`px-4 py-2 rounded-lg text-[10px] font-bold uppercase transition border ${
+                                                song.status === 'ready' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                                                song.status === 'learning' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                                'bg-zinc-800 text-zinc-500 border-zinc-700'
+                                            }`}
+                                        >
+                                            {song.status === 'ready' ? 'พร้อมลุย' : song.status === 'learning' ? 'กำลังแกะ' : 'ยังไม่เริ่ม'}
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {/* Form เพิ่มเพลง */}
+                        <div className="bg-zinc-900 border border-white/5 p-6 rounded-3xl h-fit sticky top-24">
+                            <h3 className="text-xl font-bold mb-6">🎵 เพิ่มเพลงใหม่</h3>
+                            <form onSubmit={handleAddSong} className="space-y-4">
+                                <input value={newSong.title} onChange={e => setNewSong({...newSong, title: e.target.value})} placeholder="ชื่อเพลง *" className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white outline-none focus:border-yellow-500" required />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input value={newSong.artist} onChange={e => setNewSong({...newSong, artist: e.target.value})} placeholder="ศิลปิน" className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white outline-none focus:border-yellow-500" />
+                                    <input value={newSong.key} onChange={e => setNewSong({...newSong, key: e.target.value})} placeholder="Key" className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white outline-none focus:border-yellow-500" />
+                                </div>
+                                <input value={newSong.youtube_link} onChange={e => setNewSong({...newSong, youtube_link: e.target.value})} placeholder="YouTube URL" className="w-full bg-black border border-zinc-700 p-3 rounded-xl text-white outline-none focus:border-yellow-500 text-sm" />
+                                <button type="submit" className="w-full bg-yellow-500 text-black font-bold py-3 rounded-xl hover:brightness-110 transition shadow-lg">+ เพิ่มลงรายการ</button>
+                            </form>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-center py-20 bg-zinc-900/30 rounded-3xl border border-dashed border-zinc-800">
+                        <p className="text-zinc-500">เลือก หรือ สร้าง Setlist เพื่อเริ่มใช้งาน</p>
+                    </div>
+                )}
+
+                 {/* Modal สร้าง Setlist */}
+                 {showAddSetlist && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                        <div className="bg-zinc-900 p-8 rounded-3xl w-full max-w-md border border-white/10">
+                            <h3 className="text-xl font-bold mb-4">ตั้งชื่อ Setlist ใหม่</h3>
+                            <input 
+                                autoFocus
+                                value={newSetlistTitle}
+                                onChange={e => setNewSetlistTitle(e.target.value)}
+                                placeholder="เช่น ซ้อมวันศุกร์..."
+                                className="w-full bg-black border border-zinc-700 p-4 rounded-xl text-white mb-6 outline-none focus:border-yellow-500"
+                            />
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowAddSetlist(false)} className="flex-1 py-3 rounded-xl font-bold text-zinc-400 hover:bg-zinc-800">ยกเลิก</button>
+                                <button onClick={handleCreateSetlist} className="flex-1 bg-yellow-500 text-black py-3 rounded-xl font-bold hover:brightness-110">สร้างเลย</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+             </div>
+        )}
+
+        {/* --- Tab: Chat --- */}
+        {activeTab === 'chat' && (
             <div className="animate-in fade-in zoom-in duration-300">
                 <BandChat bandId={Number(id as string)} user={user} />
             </div>

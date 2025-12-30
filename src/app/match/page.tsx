@@ -151,6 +151,18 @@ export default function MatchPage() {
                                         </button>
                                     </div>
 
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full ${m.skill_match_percent > 80 ? 'bg-green-500' : m.skill_match_percent > 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                                style={{ width: `${m.skill_match_percent}%` }}
+                                            ></div>
+                                        </div>
+                                        <span className="text-[10px] text-zinc-500 font-bold uppercase">
+                                            Skill Match: <span className="text-white">{m.skill_match_percent}%</span>
+                                        </span>
+                                    </div>
+
                                     {/* Common Genres tags */}
                                     <div className="flex flex-wrap gap-2 mb-8 h-7 overflow-hidden">
                                         {m.common.map((g: string) => (

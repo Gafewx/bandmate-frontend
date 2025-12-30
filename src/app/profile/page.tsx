@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/src/components/Navbar';
+import SkillSlider from '@/src/components/SkillSlider'; // 👈 Import ตัวนี้มาด้วย
 
 export default function ProfilePage() {
     const router = useRouter();
@@ -17,7 +18,13 @@ export default function ProfilePage() {
         bio: '',
         youtube_link: '',
         profile_img: '',
-        is_looking_for_band: true
+        is_looking_for_band: true,
+        // 👇 เพิ่มค่าพลังเริ่มต้น
+        skill_solo: 50,
+        skill_rhythm: 50,
+        skill_theory: 50,
+        skill_live: 50,
+        skill_ear: 50
     });
 
     useEffect(() => {
@@ -30,7 +37,7 @@ export default function ProfilePage() {
         setUser(parsedUser);
 
         // ดึงข้อมูลล่าสุด
-        axios.get(`/api/users/${parsedUser.user_id}`)
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/users/${parsedUser.user_id}`)
             .then(res => {
                 setFormData({
                     full_name: res.data.full_name || '',
@@ -39,7 +46,13 @@ export default function ProfilePage() {
                     bio: res.data.bio || '',
                     youtube_link: res.data.youtube_link || '',
                     profile_img: res.data.profile_img || '',
-                    is_looking_for_band: res.data.is_looking_for_band
+                    is_looking_for_band: res.data.is_looking_for_band ?? true,
+                    // 👇 ดึงค่าพลังจาก DB (ถ้าไม่มีให้ Default 50)
+                    skill_solo: res.data.skill_solo ?? 50,
+                    skill_rhythm: res.data.skill_rhythm ?? 50,
+                    skill_theory: res.data.skill_theory ?? 50,
+                    skill_live: res.data.skill_live ?? 50,
+                    skill_ear: res.data.skill_ear ?? 50
                 });
                 setLoading(false);
             })
@@ -52,12 +65,13 @@ export default function ProfilePage() {
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await axios.patch(`/api/users/${user.user_id}`, formData);
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+            await axios.patch(`${apiUrl}/api/users/${user.user_id}`, formData);
 
             // อัปเดต LocalStorage
             const newUser = { ...user, ...formData };
             localStorage.setItem('user', JSON.stringify(newUser));
-            setUser(newUser); // อัปเดต State ให้ Navbar เห็นการเปลี่ยนแปลงทันที
+            setUser(newUser); 
 
             alert('✅ บันทึกข้อมูลเรียบร้อย!');
         } catch (error) {
@@ -76,13 +90,12 @@ export default function ProfilePage() {
     return (
         <div className="min-h-screen bg-black text-white font-sans selection:bg-yellow-500 selection:text-black">
             
-            {/* 1. ใส่ Navbar เพื่อให้เหมือนหน้าอื่น */}
             <Navbar user={user} onLogout={handleLogout} />
 
             <div className="max-w-5xl mx-auto py-24 px-6">
                 <div className="bg-zinc-900 rounded-3xl shadow-2xl overflow-hidden border border-white/10 flex flex-col md:flex-row">
 
-                    {/* 🎨 ฝั่งซ้าย: Preview Card (ปรับเป็น Dark Mode) */}
+                    {/* 🎨 ฝั่งซ้าย: Preview Card */}
                     <div className="md:w-1/3 bg-gradient-to-b from-zinc-800 to-black p-8 flex flex-col items-center text-center relative border-r border-white/10">
                         <div className="relative z-10 w-full flex flex-col items-center">
                             {/* รูปโปรไฟล์ */}
@@ -109,7 +122,7 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    {/* 📝 ฝั่งขวา: Edit Form (ปรับ Input เป็น Dark Mode) */}
+                    {/* 📝 ฝั่งขวา: Edit Form */}
                     <div className="md:w-2/3 p-8 md:p-12">
                         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-8">
                             🛠️ แก้ไขข้อมูลส่วนตัว
@@ -159,7 +172,24 @@ export default function ProfilePage() {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* 👇 ส่วน RPG Stats ที่เพิ่มเข้ามา */}
+                            <div className="bg-zinc-800/50 border border-white/5 p-6 rounded-2xl relative overflow-hidden mt-6">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 blur-[40px] rounded-full pointer-events-none"></div>
+                                
+                                <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-white">
+                                    📊 ระดับความสามารถ <span className="text-[10px] font-normal text-zinc-400 bg-zinc-800 px-2 py-1 rounded border border-white/5">RPG Stats</span>
+                                </h3>
+
+                                <div className="space-y-2">
+                                    <SkillSlider label="Solo / Improvisation" value={formData.skill_solo} onChange={v => setFormData({...formData, skill_solo: v})} color="text-pink-500" />
+                                    <SkillSlider label="Rhythm / Groove" value={formData.skill_rhythm} onChange={v => setFormData({...formData, skill_rhythm: v})} color="text-blue-500" />
+                                    <SkillSlider label="Music Theory" value={formData.skill_theory} onChange={v => setFormData({...formData, skill_theory: v})} color="text-purple-500" />
+                                    <SkillSlider label="Live Performance" value={formData.skill_live} onChange={v => setFormData({...formData, skill_live: v})} color="text-orange-500" />
+                                    <SkillSlider label="Ear Training" value={formData.skill_ear} onChange={v => setFormData({...formData, skill_ear: v})} color="text-green-500" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-400 mb-2">YouTube Link</label>
                                     <input type="url" placeholder="https://youtube.com/..." 

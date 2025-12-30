@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react'; // 👈 1. Import Suspense เข้ามา
 import axios from 'axios';
 import PaymentQR from '@/src/components/PaymentQR';
 import Navbar from '@/src/components/Navbar';
 import Link from 'next/link';
 
-export default function BookingPage() {
+// 👇 2. สร้าง Component ไส้ใน (BookingContent) แล้วย้าย Logic ทั้งหมดมาใส่นี่
+function BookingContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -15,15 +17,13 @@ export default function BookingPage() {
     const roomName = searchParams.get('name');
     const price = Number(searchParams.get('price'));
 
-    // 🟢 เปลี่ยนวิธีเก็บข้อมูล: แยกวันที่, เวลาเริ่ม, และจำนวนชั่วโมง
-    const [bookingDate, setBookingDate] = useState('');     // วันที่ (เช่น 2023-12-25)
-    const [startTime, setStartTime] = useState('12:00');    // เวลาเริ่ม (ค่า Default)
-    const [duration, setDuration] = useState(1);            // จำนวนชั่วโมง (Default 1 ชม.)
+    const [bookingDate, setBookingDate] = useState('');
+    const [startTime, setStartTime] = useState('12:00');
+    const [duration, setDuration] = useState(1);
 
     const [user, setUser] = useState<any>(null);
     const [totalPrice, setTotalPrice] = useState(0);
 
-    // สร้างรายการเวลาให้เลือก (09:00 - 23:00)
     const timeSlots = Array.from({ length: 15 }, (_, i) => {
         const hour = 9 + i;
         return `${hour.toString().padStart(2, '0')}:00`;
@@ -39,7 +39,6 @@ export default function BookingPage() {
         }
     }, [router]);
 
-    // 🧮 คำนวณราคาทันทีเมื่อมีการเปลี่ยนค่า
     useEffect(() => {
         if (price && duration > 0) {
             setTotalPrice(price * duration);
@@ -49,16 +48,15 @@ export default function BookingPage() {
     const handleBooking = async () => {
         if (!bookingDate || !startTime) return alert('กรุณาเลือกวันและเวลาให้ครบ');
 
-        // 🧠 Logic คำนวณเวลาเริ่ม-จบ ส่งให้ Backend
         const startDateTimeString = `${bookingDate}T${startTime}:00`;
         const start = new Date(startDateTimeString);
-
-        // คำนวณเวลาจบ (เอาเวลาเริ่ม + จำนวนชั่วโมง)
         const end = new Date(start.getTime() + duration * 60 * 60 * 1000);
 
         try {
+            // 👇 ตรงนี้สำคัญ: ถ้าขึ้น Production แล้ว URL จะเปลี่ยนไปตาม Environment Variable
+            // แต่ถ้ายังใช้ Ngrok อยู่ ก็ใส่ Header ไว้กันเหนียวได้ครับ
             await axios.post(
-                'api/bookings',
+                '/api/bookings', // ใช้ Relative path เดี๋ยว Next.js จัดการต่อให้
                 {
                     user_id: user.user_id,
                     room_id: roomId,
@@ -66,7 +64,7 @@ export default function BookingPage() {
                     start_time: start.toISOString(),
                     end_time: end.toISOString()
                 },
-                { // 👇 ส่วนที่เพิ่มเข้ามา (Argument ที่ 3)
+                {
                     headers: {
                         "ngrok-skip-browser-warning": "true",
                         "Content-Type": "application/json"
@@ -87,7 +85,6 @@ export default function BookingPage() {
         }
     };
 
-    // คำนวณเวลาจบเพื่อโชว์ให้ user เห็น
     const getEndTimeDisplay = () => {
         if (!bookingDate || !startTime) return '-';
         const start = new Date(`${bookingDate}T${startTime}:00`);
@@ -108,7 +105,7 @@ export default function BookingPage() {
             <div className="pt-24 pb-12 px-4 flex items-center justify-center">
                 <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8">
 
-                    {/* 👈 ฝั่งซ้าย: ฟอร์มเลือกแบบง่าย */}
+                    {/* 👈 ฝั่งซ้าย */}
                     <div className="bg-zinc-900 border border-white/10 p-6 md:p-8 rounded-3xl shadow-2xl">
                         <Link href="/rooms" className="text-gray-400 text-sm hover:text-white mb-6 inline-block">
                             ← เปลี่ยนห้อง
@@ -131,12 +128,12 @@ export default function BookingPage() {
                                     className="w-full bg-black border border-zinc-700 p-4 rounded-xl focus:ring-2 focus:ring-yellow-500 outline-none text-white text-lg"
                                     style={{ colorScheme: 'dark' }}
                                     onChange={(e) => setBookingDate(e.target.value)}
-                                    min={new Date().toISOString().split('T')[0]} // ห้ามเลือกย้อนหลัง
+                                    min={new Date().toISOString().split('T')[0]}
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                {/* 2. เลือกเวลาเริ่ม (Dropdown) */}
+                                {/* 2. เลือกเวลาเริ่ม */}
                                 <div>
                                     <label className="block text-gray-300 font-bold mb-2">2. เริ่มกี่โมง?</label>
                                     <select
@@ -160,14 +157,14 @@ export default function BookingPage() {
                                         >-</button>
                                         <div className="flex-1 text-center font-bold text-lg">{duration} ชม.</div>
                                         <button
-                                            onClick={() => setDuration(prev => Math.min(8, prev + 1))} // ลิมิตไม่เกิน 8 ชม.
+                                            onClick={() => setDuration(prev => Math.min(8, prev + 1))}
                                             className="px-4 py-4 hover:bg-zinc-800 text-green-500 font-bold text-xl transition"
                                         >+</button>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Info Box: บอกเวลาสรุป */}
+                            {/* Info Box */}
                             {bookingDate && (
                                 <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl flex items-center gap-3">
                                     <div className="bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold">i</div>
@@ -179,9 +176,8 @@ export default function BookingPage() {
                         </div>
                     </div>
 
-                    {/* 👉 ฝั่งขวา: สรุปยอด & QR Code */}
+                    {/* 👉 ฝั่งขวา */}
                     <div className="flex flex-col gap-6">
-                        {/* Card สรุปยอด */}
                         <div className="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 p-8 rounded-3xl shadow-lg relative overflow-hidden">
                             <h2 className="text-xl font-bold mb-6 text-gray-200">🧾 สรุปยอดชำระ</h2>
 
@@ -214,7 +210,7 @@ export default function BookingPage() {
                                 <div className="flex justify-center mb-4">
                                     <PaymentQR
                                         amount={totalPrice}
-                                        phoneNumber="0863795323" // 👈 แก้เบอร์ตรงนี้
+                                        phoneNumber="0863795323"
                                     />
                                 </div>
 
@@ -235,5 +231,18 @@ export default function BookingPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// 👇 3. Component หลัก เหลือแค่นี้พอ!
+export default function BookingPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-black flex items-center justify-center text-white">
+                Loading Booking Info...
+            </div>
+        }>
+            <BookingContent />
+        </Suspense>
     );
 }

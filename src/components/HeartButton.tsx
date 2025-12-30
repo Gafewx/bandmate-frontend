@@ -15,7 +15,7 @@ export default function HeartButton({ userId, targetId, type }: HeartButtonProps
   // เช็คสถานะเริ่มต้น
   useEffect(() => {
     if (!userId) return;
-    axios.get(`http://localhost:3000/api/favorites/user/${userId}`)
+    axios.get(`/api/favorites/user/${userId}`)
       .then(res => {
         const found = res.data.find((f: any) => f.target_id === targetId && f.type === type);
         if (found) setIsLiked(true);
@@ -31,7 +31,7 @@ export default function HeartButton({ userId, targetId, type }: HeartButtonProps
     setIsLiked(!isLiked);
 
     try {
-      await axios.post('http://localhost:3000/api/favorites/toggle', {
+      await axios.post('/api/favorites/toggle', {
         user_id: userId,
         target_id: targetId,
         type

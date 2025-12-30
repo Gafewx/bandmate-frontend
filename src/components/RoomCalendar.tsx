@@ -85,7 +85,7 @@ export default function RoomCalendar({ roomId }: RoomCalendarProps) {
   useEffect(() => {
     const fetchBookings = async () => {
       try {
-        const res = await axios.get(`http://localhost:3000/api/bookings/room/${roomId}`);
+        const res = await axios.get(`/api/bookings/room/${roomId}`);
         
         const calendarEvents = res.data.map((b: any) => ({
           title: b.status === 'confirmed' ? '❌ ไม่ว่าง' : '⏳ รออนุมัติ', // เปลี่ยนข้อความให้สั้นกระชับ

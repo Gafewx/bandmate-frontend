@@ -47,17 +47,15 @@ export default function Navbar({ user, onLogout }: NavbarProps) {
           </Link>
           <Link href="/match" className={isActive('/match')}>❤️ Matching</Link>
           
-          {/* 👇 ส่วนของ Admin และ Owner */}
+          {/* ส่วนของ Admin และ Owner */}
           {user && (
             <>
-                {/* ปุ่มสแกนตั๋ว (เห็นได้ทั้ง Admin และ Owner) */}
                 {(user.role === 'admin' || user.role === 'owner') && (
                      <Link href="/admin/scan" className={`flex items-center gap-1 hover:text-yellow-400 ${isActive('/admin/scan')}`}>
                         📷 ตรวจตั๋ว
                      </Link>
                 )}
 
-                {/* ปุ่ม Dashboard (เฉพาะ Owner) */}
                 {user.role === 'owner' && (
                     <Link href="/dashboard" className="text-yellow-500 hover:text-yellow-300 transition border border-yellow-500/30 px-3 py-1 rounded-full bg-yellow-500/10 flex items-center gap-1">
                        📊 จัดการร้าน
@@ -104,26 +102,47 @@ export default function Navbar({ user, onLogout }: NavbarProps) {
                 {isDropdownOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsDropdownOpen(false)}></div>
-                    <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-2 z-20 animate-in fade-in zoom-in duration-200">
+                    <div className="absolute right-0 mt-2 w-64 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-2 z-20 animate-in fade-in zoom-in duration-200 overflow-hidden">
                       
                       {/* Header Dropdown */}
-                      <div className="px-4 py-2 border-b border-gray-800 mb-1">
-                        <p className="text-xs text-gray-500">Login as ({user.role})</p>
+                      <div className="px-4 py-3 border-b border-gray-800 mb-1 bg-white/5">
+                        <p className="text-xs text-gray-500 uppercase font-bold">Signed in as</p>
                         <p className="text-sm font-bold text-white truncate">{user.username}</p>
                       </div>
                       
                       {/* Common Links */}
-                      <Link href="/profile" className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/10 hover:text-white">👤 โปรไฟล์</Link>
-                      <Link href="/my-bookings" className="block px-4 py-2 text-sm text-gray-300 hover:bg-white/10 hover:text-white">📅 การจองของฉัน</Link>
+                      <div className="py-1">
+                        <Link href="/profile" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white flex items-center gap-2">
+                            👤 โปรไฟล์
+                        </Link>
+
+                        {/* 👇 เมนูใหม่ที่เพิ่มเข้ามา */}
+                        <Link href="/bands" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-white/10 hover:text-yellow-400 flex items-center gap-2">
+                            🎸 วงดนตรีของฉัน 
+                            <span className="text-[10px] bg-yellow-500/20 text-yellow-500 px-1.5 py-0.5 rounded border border-yellow-500/20">Setlist</span>
+                        </Link>
+
+                        <Link href="/rooms" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-white/10 hover:text-blue-400 flex items-center gap-2">
+                            🎹 จองห้องซ้อม
+                        </Link>
+
+                        <Link href="/match" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-white/10 hover:text-green-400 flex items-center gap-2">
+                            🔥 หาเพื่อนร่วมวง
+                        </Link>
+
+                        <Link href="/my-bookings" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white flex items-center gap-2">
+                            📅 ประวัติการจอง
+                        </Link>
+                      </div>
                       
-                      {/* 👇 เมนูพิเศษสำหรับ Admin/Owner ใน Dropdown */}
+                      {/* Admin/Owner Menu */}
                       {(user.role === 'admin' || user.role === 'owner') && (
                         <>
                            <div className="border-t border-gray-800 my-1"></div>
-                           <p className="px-4 py-1 text-xs text-gray-500 font-bold uppercase">Management</p>
+                           <p className="px-4 py-1 text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-1">Management</p>
                            
                            <Link href="/admin/scan" className="block px-4 py-2 text-sm text-white hover:bg-white/10 flex items-center gap-2">
-                                📷 สแกน QR Code
+                               📷 สแกน QR Code
                            </Link>
 
                            {user.role === 'owner' && (
@@ -135,7 +154,9 @@ export default function Navbar({ user, onLogout }: NavbarProps) {
                       )}
 
                       <div className="border-t border-gray-800 mt-1 pt-1">
-                        <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/10">🚪 ออกจากระบบ</button>
+                        <button onClick={onLogout} className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 font-bold flex items-center gap-2">
+                            🚪 ออกจากระบบ
+                        </button>
                       </div>
                     </div>
                   </>
@@ -150,15 +171,20 @@ export default function Navbar({ user, onLogout }: NavbarProps) {
       {isMobileMenuOpen && (
         <div className="md:hidden bg-zinc-900 border-t border-white/10 animate-in slide-in-from-top-5">
           <div className="px-4 pt-2 pb-4 space-y-1">
-            <Link href="/" className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-white/10">🎸 หาเพื่อนเล่นดนตรี</Link>
+            <Link href="/" className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-white/10">🏠 หน้าแรก</Link>
             <Link href="/rooms" className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-white/10">🥁 จองห้องซ้อม</Link>
             <Link href="/match" className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-white/10">❤️ Matching</Link>
             
             {user && (
                <>
+                 <div className="border-t border-gray-700 my-2 pt-2"></div>
+                 <p className="px-3 text-xs text-gray-500 uppercase font-bold mb-1">เมนูส่วนตัว</p>
+                 
+                 <Link href="/profile" className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-white/10">👤 โปรไฟล์</Link>
+                 {/* 👇 เพิ่มเมนู My Bands ในมือถือด้วย */}
+                 <Link href="/bands" className="block px-3 py-2 rounded-md text-base font-medium text-yellow-500 hover:text-white hover:bg-white/10">🎸 วงดนตรีของฉัน</Link>
                  <Link href="/my-bookings" className="block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-white/10">📅 การจองของฉัน</Link>
                  
-                 {/* 👇 เมนู Admin/Owner ในมือถือ */}
                  {(user.role === 'admin' || user.role === 'owner') && (
                     <div className="pt-2 mt-2 border-t border-gray-700">
                         <p className="px-3 text-xs text-gray-500 uppercase font-bold mb-1">ส่วนจัดการ</p>
@@ -172,6 +198,9 @@ export default function Navbar({ user, onLogout }: NavbarProps) {
                         )}
                     </div>
                  )}
+                 <button onClick={onLogout} className="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-red-400 hover:bg-red-500/10 mt-2">
+                    🚪 ออกจากระบบ
+                 </button>
                </>
             )}
 

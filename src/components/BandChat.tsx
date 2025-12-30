@@ -8,10 +8,7 @@ interface BandChatProps {
     user: any;
 }
 
-// 🚨🚨🚨 สำคัญมาก: ใส่ URL ของ NGROK ที่รัน BACKEND (Port 3000) ตรงนี้ 🚨🚨🚨
-// ห้ามใส่ localhost, ห้ามใส่ undefined
-// ตัวอย่าง: const SOCKET_URL = 'https://a1b2-c3d4.ngrok-free.dev';
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || undefined;
+const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || undefined;
 
 export default function BandChat({ bandId, user }: BandChatProps) {
     const [messages, setMessages] = useState<any[]>([]);

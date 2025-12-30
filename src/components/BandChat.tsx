@@ -8,7 +8,14 @@ interface BandChatProps {
     user: any;
 }
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || undefined;
+// 🛠️ Helper: ตัด /api ออกจาก URL เพื่อให้ได้ Base URL จริงๆ สำหรับ Socket
+const getBaseUrl = (url?: string) => {
+    if (!url) return undefined;
+    return url.replace(/\/api$/, ''); // ถ้าลงท้ายด้วย /api ให้ลบออก
+};
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const SOCKET_BASE_URL = getBaseUrl(API_URL);
 
 export default function BandChat({ bandId, user }: BandChatProps) {
     const [messages, setMessages] = useState<any[]>([]);
@@ -18,30 +25,35 @@ export default function BandChat({ bandId, user }: BandChatProps) {
 
     // 1. เชื่อมต่อ Socket และดึงประวัติแชท
     useEffect(() => {
-        console.log('Connecting to Socket:', SOCKET_URL);
+        if (!SOCKET_BASE_URL) {
+            console.error("❌ Socket URL is missing!");
+            return;
+        }
+
+        console.log('🔌 Connecting to Socket:', SOCKET_BASE_URL);
 
         // Connect Socket
-        const newSocket = io(SOCKET_URL, {
-            transports: ['websocket', 'polling'], // ลองทั้ง 2 แบบเพื่อความชัวร์
+        const newSocket = io(SOCKET_BASE_URL, {
+            path: '/socket.io', // ค่า Default แต่อย่าลืมใส่เพื่อความชัวร์
+            transports: ['websocket'], // 👈 บังคับใช้ websocket เท่านั้น (แก้ปัญหา 308)
             extraHeaders: {
                 "ngrok-skip-browser-warning": "true"
             },
-            withCredentials: true, // ส่ง Cookies/Headers ที่จำเป็น
+            withCredentials: true,
+            reconnectionAttempts: 5, // พยายามต่อใหม่ 5 ครั้งถ้าหลุด
         });
 
-        // Debug: เช็คว่าต่อติดไหม
         newSocket.on('connect', () => {
             console.log('✅ Socket Connected! ID:', newSocket.id);
+            // Join Room หลังจากต่อติดแล้ว
+            newSocket.emit('join_band', { bandId });
         });
 
         newSocket.on('connect_error', (err) => {
-            console.error('❌ Socket Connection Error:', err);
+            console.error('❌ Socket Connection Error:', err.message);
         });
 
         setSocket(newSocket);
-
-        // Join Room
-        newSocket.emit('join_band', { bandId });
 
         // Listen for incoming messages
         newSocket.on('new_band_message', (msg) => {
@@ -53,14 +65,25 @@ export default function BandChat({ bandId, user }: BandChatProps) {
         fetchHistory();
 
         return () => {
+            console.log('🔌 Disconnecting Socket...');
             newSocket.disconnect();
         };
     }, [bandId]);
 
     const fetchHistory = async () => {
+        if (!API_URL) return;
+        
         try {
-            // 👇 ต้องใช้ URL เต็มเหมือนกัน เพื่อไม่ให้มือถือวิ่งไปหา Frontend (ซึ่งไม่มีข้อมูล)
-            const res = await axios.get(`${SOCKET_URL}/api/bands/${bandId}/messages`, {
+            // ใช้ API_URL (ที่มีหรือไม่มี /api ก็ได้ แต่เราต้องจัดการ Path ให้ถูก)
+            // สมมติว่า API_URL คือ ...onrender.com (ไม่มี /api)
+            const targetUrl = API_URL.endsWith('/api') 
+                ? `${API_URL}/bands/${bandId}/messages`
+                : `${API_URL}/bands/${bandId}/messages`; // 👈 เช็ค Backend Route ดีๆ ว่าต้องมี /api ไหม
+
+            // ⚠️ ถ้า Backend Route จริงๆ คือ /api/bands/... ให้ใช้บรรทัดล่างนี้แทน:
+            // const targetUrl = `${SOCKET_BASE_URL}/api/bands/${bandId}/messages`;
+
+            const res = await axios.get(targetUrl, {
                 headers: { "ngrok-skip-browser-warning": "true" }
             });
             setMessages(res.data);
@@ -80,7 +103,6 @@ export default function BandChat({ bandId, user }: BandChatProps) {
         e.preventDefault();
         if (!newMessage.trim() || !socket) return;
 
-        // ส่ง Event ไปหา Server
         socket.emit('send_band_message', {
             bandId,
             userId: user.user_id,
@@ -110,6 +132,7 @@ export default function BandChat({ bandId, user }: BandChatProps) {
                                 <img
                                     src={`https://ui-avatars.com/api/?name=${msg.sender?.full_name || 'User'}&background=random`}
                                     className="w-8 h-8 rounded-full mb-1"
+                                    alt="avatar"
                                 />
                             )}
 
